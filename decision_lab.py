@@ -31,7 +31,7 @@ def _run_paths(data, years: int, paths: int, seed: int, event: str | None = None
             # Year 1 starts at present age; normal retirement at the beginning of the year the member reaches retirement age.
             age = member['age'] + year - 1
             retired = age >= member['retire_age'] or (
-                event == 'retirement' and member['id'] == member_id and year >= 1
+                event == 'retirement' and member['id'] == member_id and year >= 2
             )
             cashflow = (member['retirement_income'] - member['retirement_spending']) if retired else (member['income'] - member['expenses'])
             if member['id'] == member_id and year == 1:

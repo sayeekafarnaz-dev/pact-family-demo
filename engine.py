@@ -15,20 +15,20 @@ SEED = 26011
 DEFAULT = {
  'family':'The Morgan Family', 'currency':'USD', 'kind':'SYNTHETIC DEMONSTRATION',
  'members':[
-  {'id':'father','name':'Daniel','relation':'Father','age':63,'retire_age':64,'income':115000,'expenses':76000,'liabilities':155000,'liquid_cash':58000,'target_vol':.085,'risk_tolerance':'Moderately conservative','risk_capacity':.095,'retirement_income':51000,'retirement_spending':70000,'accounts':[
-   {'id':'f401k','name':'401(k)','tax':'Tax-deferred','balance':520000,'allocation':[.37,.10,.47,.06]},
-   {'id':'fbroker','name':'Brokerage','tax':'Taxable','balance':160000,'allocation':[.49,.11,.25,.15]}],
-   'goals':[{'name':'Retirement','target':550000,'years':5}]},
-  {'id':'mother','name':'Eleanor','relation':'Mother','age':58,'retire_age':67,'income':98000,'expenses':59000,'liabilities':90000,'liquid_cash':45000,'target_vol':.12,'risk_tolerance':'Balanced','risk_capacity':.14,'retirement_income':38000,'retirement_spending':61000,'accounts':[
-   {'id':'mira','name':'Traditional IRA','tax':'Tax-deferred','balance':280000,'allocation':[.48,.17,.31,.04]},
-   {'id':'mroth','name':'Roth IRA','tax':'Tax-free*','balance':105000,'allocation':[.62,.25,.10,.03]}],
-   'goals':[{'name':'Retirement','target':450000,'years':10}]},
-  {'id':'child','name':'Alex','relation':'Adult child','age':31,'retire_age':65,'income':140000,'expenses':68000,'liabilities':72000,'liquid_cash':38000,'target_vol':.17,'risk_tolerance':'Moderately aggressive','risk_capacity':.19,'retirement_income':0,'retirement_spending':65000,'accounts':[
-   {'id':'cbroker','name':'Brokerage','tax':'Taxable','balance':145000,'allocation':[.68,.24,.06,.02]},
-   {'id':'croth','name':'Roth IRA','tax':'Tax-free*','balance':83000,'allocation':[.73,.22,.03,.02]}],
-   'goals':[{'name':'Property deposit','target':90000,'years':6}]}],
+  {'id':'father','name':'Daniel','relation':'Father','age':63,'retire_age':67,'income':33700,'expenses':30400,'liabilities':4000,'liquid_cash':3000,'home_equity':79000,'target_vol':.085,'risk_tolerance':'Moderately conservative','risk_capacity':.095,'retirement_income':25200,'retirement_spending':28000,'accounts':[
+   {'id':'f401k','name':'401(k)','tax':'Tax-deferred','balance':49000,'allocation':[.37,.10,.47,.06]},
+   {'id':'fbroker','name':'Brokerage','tax':'Taxable','balance':15000,'allocation':[.49,.11,.25,.15]}],
+   'goals':[{'name':'Retirement','target':65000,'years':5}]},
+  {'id':'mother','name':'Amira','relation':'Mother','age':58,'retire_age':67,'income':33760,'expenses':29500,'liabilities':3000,'liquid_cash':3000,'target_vol':.12,'risk_tolerance':'Balanced','risk_capacity':.14,'retirement_income':23500,'retirement_spending':26600,'accounts':[
+   {'id':'mira','name':'Traditional IRA','tax':'Tax-deferred','balance':24000,'allocation':[.48,.17,.31,.04]},
+   {'id':'mroth','name':'Roth IRA','tax':'Tax-free*','balance':7900,'allocation':[.62,.25,.10,.03]}],
+   'goals':[{'name':'Retirement','target':55000,'years':10}]},
+  {'id':'child','name':'Maya','relation':'Adult child','age':31,'retire_age':65,'income':20000,'expenses':17600,'liabilities':1000,'liquid_cash':2000,'target_vol':.17,'risk_tolerance':'Moderately aggressive','risk_capacity':.19,'retirement_income':0,'retirement_spending':65000,'accounts':[
+   {'id':'cbroker','name':'Brokerage','tax':'Taxable','balance':12000,'allocation':[.68,.24,.06,.02]},
+   {'id':'croth','name':'Roth IRA','tax':'Tax-free*','balance':6000,'allocation':[.73,.22,.03,.02]}],
+   'goals':[{'name':'Property deposit','target':30000,'years':6}]}],
  'family_target_vol':.125,
- 'family_goal':{'name':'Long-term capital','target':1750000,'years':15}
+ 'family_goal':{'name':'Long-term capital','target':250000,'years':15}
 }
 
 def balance(m): return sum(a['balance'] for a in m['accounts'])
@@ -43,10 +43,10 @@ def snapshot(data:dict):
  members=[]; total=np.zeros(4); bal=0; assets=liabilities=income=expenses=0
  for m in data['members']:
   b=balance(m); w=holdings(m); total+=w*b; bal+=b
-  a=b+m['liquid_cash']; debt=m['liabilities']; inc=m['income']; exp=m['expenses']
+  a=b+m['liquid_cash']+m.get('home_equity',0); debt=m['liabilities']; inc=m['income']; exp=m['expenses']
   assets+=a; liabilities+=debt; income+=inc; expenses+=exp
   members.append({'id':m['id'],'name':m['name'],'relation':m['relation'],'age':m['age'],
-    'assets':money(a),'investments':money(b),'liabilities':money(debt),'net_worth':money(a-debt),
+    'assets':money(a),'home_equity':money(m.get('home_equity',0)),'investments':money(b),'liabilities':money(debt),'net_worth':money(a-debt),
     'income':money(inc),'expenses':money(exp),'surplus':money(inc-exp),'cash':money(m['liquid_cash']),
     'liquidity_months':money(m['liquid_cash']/(exp/12)) if exp else None,
     'allocation':[round(float(x),6) for x in w], 'actual_volatility':round(portfolio_vol(w),6),

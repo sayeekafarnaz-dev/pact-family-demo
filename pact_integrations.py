@@ -4,7 +4,8 @@ import httpx
 from fastapi import APIRouter,HTTPException,Request
 from pydantic import BaseModel,Field
 from openai import OpenAI
-from engine import DEFAULT,CLASSES,simulate
+from engine import DEFAULT, CLASSES, simulate, snapshot
+from decision_lab import EVENTS, compare_decision
 router=APIRouter(prefix="/api/public")
 _CALLS={}
 log=logging.getLogger(__name__)
@@ -23,7 +24,26 @@ def portfolio():
  total=round(sum(r["value"] for r in rows),2)
  return {"data_kind":"synthetic","currency":DEFAULT["currency"],"family":DEFAULT["family"],"total":total,"rows":rows,"formula":"position_value = account.balance * allocation_weight; family_total = sum(position_value)","source":"engine.py DEFAULT","as_of":"Fixed synthetic benchmark, not live market data"}
 @router.get("/portfolio")
-def public_portfolio():return portfolio()
+def public_portfolio():
+ return {**portfolio(), "summary": snapshot(DEFAULT)}
+
+class FamilyDecision(BaseModel):
+ event: str
+ member_id: str
+ amount: float = Field(default=0, ge=0, le=1000000)
+
+@router.post("/decision")
+def public_family_decision(selection: FamilyDecision):
+ try:
+  return compare_decision(DEFAULT, **selection.model_dump(), paths=1000)
+ except ValueError as error:
+  raise HTTPException(400, str(error)) from error
+
+@router.get("/decision/options")
+def public_family_decision_options():
+ return {"events": EVENTS, "members": [
+  {"id": member["id"], "name": member["name"]} for member in DEFAULT["members"]
+ ]}
 @router.get("/simulation")
 def public_simulation(years:int=10,crash:bool=False):
  if years<1 or years>30:raise HTTPException(400,"Years must be 1-30")
