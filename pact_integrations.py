@@ -1,5 +1,5 @@
 """PACT hackathon integrations. Synthetic-only public analytics; never send live financial data to AI or PRISM."""
-import os,time,logging,uuid
+import os,time,logging,uuid,re,datetime
 import httpx
 from fastapi import APIRouter,HTTPException,Request
 from pydantic import BaseModel,Field
@@ -68,3 +68,25 @@ def ask(p:Question,request:Request):
    response.raise_for_status();trace=True
   except Exception:log.warning("PRISM trace not accepted",exc_info=True)
  return {"answer":answer,"model":result.model,"provider":"Nicrron","prism_trace_sent":trace,"session_id":session,"evidence":evidence}
+
+# Public historical market series, not holdings or account balances.
+# Yahoo's unauthenticated chart endpoint is best-effort and not a licensed Bloomberg feed.
+@router.get("/market-history")
+def market_history(symbol:str="SPY",range:str="1y",interval:str="1mo"):
+ if not re.fullmatch(r"[A-Za-z0-9.^=-]{1,20}",symbol):
+  raise HTTPException(400,"Invalid ticker")
+ if range not in {"1mo","3mo","6mo","1y","2y","5y","10y"} or interval not in {"1d","1wk","1mo"}:
+  raise HTTPException(400,"Unsupported date range or interval")
+ try:
+  with httpx.Client(timeout=9,follow_redirects=False,headers={"User-Agent":"Mozilla/5.0 (compatible; packd-demo/1.0)"}) as client:
+   response=client.get("https://query1.finance.yahoo.com/v8/finance/chart/"+symbol.upper(),params={"range":range,"interval":interval})
+   response.raise_for_status()
+   payload=response.json()["chart"]["result"][0]
+  times=payload.get("timestamp",[])
+  closes=payload["indicators"]["quote"][0]["close"]
+  rows=[{"date":datetime.datetime.fromtimestamp(t,datetime.timezone.utc).date().isoformat(),"close":round(float(v),4)} for t,v in zip(times,closes) if v is not None]
+  if not rows:raise ValueError("No price observations")
+  return {"symbol":symbol.upper(),"range":range,"interval":interval,"currency":payload.get("meta",{}).get("currency"),"observations":rows,"source":"Yahoo Finance chart endpoint","source_url":"https://finance.yahoo.com/quote/"+symbol.upper()+"/history/","as_of":rows[-1]["date"],"data_kind":"historical_market_prices","limitations":"Unadjusted closing prices; may exclude dividends, splits, FX and fees. Not evidence of family holdings or live account balances. Provider availability and licensing are not guaranteed."}
+ except (httpx.HTTPError,ValueError,KeyError,IndexError,TypeError) as exc:
+  log.warning("Historical price provider unavailable for %s: %s",symbol,exc)
+  raise HTTPException(503,"Historical price provider unavailable. No synthetic prices were substituted.") from None
