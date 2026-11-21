@@ -1,7 +1,7 @@
 from __future__ import annotations
-import copy, csv, io
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+import copy, csv, io, os, hmac, hashlib, time, html
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, Form
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from engine import DEFAULT, snapshot, simulate, optimize, tax_insights, CLASSES, COV, MU
@@ -10,6 +10,71 @@ from decision_lab import compare_decision, EVENTS
 app=FastAPI(title='PACT — family portfolio intelligence (synthetic MVP)',version='0.1.0')
 app.mount('/static',StaticFiles(directory='static'),name='static')
 DATA=copy.deepcopy(DEFAULT) # Demo-only in-memory store. Never deploy with real financial records.
+
+# --- Team-demo access control -------------------------------------------------
+# Server-side shared-password gate. Every route except PUBLIC_PATHS requires a valid
+# signed session cookie. Fails closed: if PACT_DEMO_PASSWORD is unset, nothing is served.
+SESSION_COOKIE='pact_session'
+SESSION_TTL=int(os.environ.get('PACT_SESSION_TTL_SECONDS','43200'))
+PUBLIC_PATHS={'/health','/login','/logout'}
+
+def _password()->str:return os.environ.get('PACT_DEMO_PASSWORD','')
+def _signing_key()->bytes:
+ secret=os.environ.get('PACT_SESSION_SECRET') or ('pact-derived:'+_password())
+ return hashlib.sha256(secret.encode()).digest()
+def _sign(expiry:int)->str:
+ # Binding the password fingerprint means rotating PACT_DEMO_PASSWORD invalidates sessions.
+ fp=hashlib.sha256(_password().encode()).hexdigest()[:16]
+ return hmac.new(_signing_key(),f'{expiry}.{fp}'.encode(),hashlib.sha256).hexdigest()
+def make_session_token(now:float|None=None)->str:
+ expiry=int((time.time() if now is None else now)+SESSION_TTL);return f'{expiry}.{_sign(expiry)}'
+def valid_session(token:str|None)->bool:
+ if not token or not _password():return False
+ try:exp_s,sig=token.split('.',1);expiry=int(exp_s)
+ except ValueError:return False
+ return expiry>time.time() and hmac.compare_digest(sig,_sign(expiry))
+def _secure_cookie(request:Request)->bool:
+ return request.url.scheme=='https' or os.environ.get('RENDER','').lower()=='true'
+
+LOGIN_PAGE='''<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PACT · Team demo sign-in</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f6f4;color:#162b31;font:14px/1.5 system-ui,sans-serif}form{background:#fff;border:1px solid #e4e9e6;border-radius:14px;padding:28px;width:min(360px,90vw)}h1{margin:0 0 4px;font-size:22px}input,button{width:100%;box-sizing:border-box;padding:10px;margin-top:10px;border-radius:8px;border:1px solid #cfd8d5;font:inherit}button{background:#142d36;color:#fff;border:0;cursor:pointer}.err{color:#a33;margin-top:10px}.muted{color:#67777b;font-size:12px}</style></head>
+<body><form method="post" action="/login"><h1>pact.</h1><div class="muted">Team demonstration · synthetic data only</div>
+<input type="password" name="password" placeholder="Demo password" autocomplete="current-password" required autofocus>
+<button type="submit">Sign in</button>__ERROR__</form></body></html>'''
+def _login_page(error:str='',status:int=200)->HTMLResponse:
+ err=f'<div class="err">{html.escape(error)}</div>' if error else ''
+ return HTMLResponse(LOGIN_PAGE.replace('__ERROR__',err),status_code=status,headers={'Cache-Control':'no-store'})
+
+@app.middleware('http')
+async def require_demo_password(request:Request,call_next):
+ path=request.url.path
+ if path in PUBLIC_PATHS or valid_session(request.cookies.get(SESSION_COOKIE)):
+  return await call_next(request)
+ if path.startswith('/api/'):
+  return JSONResponse({'detail':'Authentication required'},status_code=401)
+ return RedirectResponse('/login',status_code=303)
+
+@app.get('/health')
+def health():return {'status':'ok'}
+@app.get('/login')
+def login_form(request:Request):
+ if valid_session(request.cookies.get(SESSION_COOKIE)):return RedirectResponse('/',status_code=303)
+ if not _password():return _login_page('Server is not configured: PACT_DEMO_PASSWORD is not set.',503)
+ return _login_page()
+@app.post('/login')
+def login(request:Request,password:str=Form('')):
+ expected=_password()
+ if not expected:return _login_page('Server is not configured: PACT_DEMO_PASSWORD is not set.',503)
+ if not hmac.compare_digest(password.encode(),expected.encode()):
+  time.sleep(0.5) # slow down guessing
+  return _login_page('Incorrect password.',401)
+ r=RedirectResponse('/',status_code=303)
+ r.set_cookie(SESSION_COOKIE,make_session_token(),max_age=SESSION_TTL,httponly=True,samesite='strict',secure=_secure_cookie(request),path='/')
+ return r
+@app.post('/logout')
+def logout():
+ r=RedirectResponse('/login',status_code=303);r.delete_cookie(SESSION_COOKIE,path='/');return r
+# -----------------------------------------------------------------------------
 
 @app.get('/')
 def home():return FileResponse('static/index.html')
