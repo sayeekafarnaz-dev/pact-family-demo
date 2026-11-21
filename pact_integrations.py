@@ -4,7 +4,7 @@ import httpx
 from fastapi import APIRouter,HTTPException,Request
 from pydantic import BaseModel,Field
 from openai import OpenAI
-from engine import DEFAULT,CLASSES
+from engine import DEFAULT,CLASSES,simulate
 router=APIRouter(prefix="/api/public")
 _CALLS={}
 log=logging.getLogger(__name__)
@@ -23,6 +23,11 @@ def portfolio():
  return {"data_kind":"synthetic","currency":DEFAULT["currency"],"family":DEFAULT["family"],"total":total,"rows":rows,"formula":"position_value = account.balance * allocation_weight; family_total = sum(position_value)","source":"engine.py DEFAULT","as_of":"Fixed synthetic benchmark, not live market data"}
 @router.get("/portfolio")
 def public_portfolio():return portfolio()
+@router.get("/simulation")
+def public_simulation(years:int=10,crash:bool=False):
+ if years<1 or years>30:raise HTTPException(400,"Years must be 1-30")
+ result=simulate(DEFAULT,years=years,paths=1000,seed=26011,market_crash=crash)
+ return {"data_kind":"synthetic","source":"engine.simulate(DEFAULT, seed=26011, paths=1000)","scenario":{"years":years,"market_crash":crash},"result":result}
 @router.get("/integrations")
 def integrations():
  return {"nicrron_configured":bool(os.getenv("NICRRON_API_KEY")),"prism_configured":bool((os.getenv("PRISMTRACE_API_KEY") or os.getenv("PRISM_API_KEY")) and os.getenv("PRISMTRACE_PROJECT_ID")),"plaid_configured":bool(os.getenv("PLAID_CLIENT_ID") and os.getenv("PLAID_SECRET")),"plaid_environment":os.getenv("PLAID_ENV","sandbox"),"data_kind":"synthetic"}
