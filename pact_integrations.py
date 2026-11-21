@@ -1,11 +1,12 @@
 """PACT hackathon integrations. Synthetic-only public analytics; never send live financial data to AI or PRISM."""
 import os,time,logging,uuid
 import httpx
-from fastapi import APIRouter,HTTPException
+from fastapi import APIRouter,HTTPException,Request
 from pydantic import BaseModel,Field
 from openai import OpenAI
 from engine import DEFAULT,CLASSES
 router=APIRouter(prefix="/api/public")
+_CALLS={}
 log=logging.getLogger(__name__)
 class Question(BaseModel):
  question:str=Field(min_length=2,max_length=1200)
@@ -26,7 +27,12 @@ def public_portfolio():return portfolio()
 def integrations():
  return {"nicrron_configured":bool(os.getenv("NICRRON_API_KEY")),"prism_configured":bool((os.getenv("PRISMTRACE_API_KEY") or os.getenv("PRISM_API_KEY")) and os.getenv("PRISMTRACE_PROJECT_ID")),"plaid_configured":bool(os.getenv("PLAID_CLIENT_ID") and os.getenv("PLAID_SECRET")),"plaid_environment":os.getenv("PLAID_ENV","sandbox"),"data_kind":"synthetic"}
 @router.post("/ask")
-def ask(p:Question):
+def ask(p:Question,request:Request):
+ ip=request.client.host if request.client else 'unknown'
+ now=time.time()
+ _CALLS[ip]=[t for t in _CALLS.get(ip,[]) if now-t<3600]
+ if len(_CALLS[ip])>=5:raise HTTPException(429,'Demo limit: five AI questions per hour.')
+ _CALLS[ip].append(now)
  key=os.getenv("NICRRON_API_KEY")
  if not key:raise HTTPException(503,"Nicrron is not configured; no other model provider will be used.")
  if p.member!="family" and p.member not in {m["id"] for m in DEFAULT["members"]}:raise HTTPException(400,"Unknown member")
@@ -51,7 +57,7 @@ def ask(p:Question):
  if trace_key and project:
   try:
    # Synthetic-only trace: no bank tokens, real customer data or identifiable accounts.
-   response=httpx.post("https://api.prism.blockconvey.com/api/traces",headers={"X-PRISMtrace-Key":trace_key},json={"project_id":project,"model":result.model,"input_messages":[{"role":"user","content":p.question+" [synthetic benchmark]"}],"output_message":answer,"latency_ms":round((time.perf_counter()-started)*1000),"session_id":session,"agent_id":"pact-aunt-mabel","agent_name":"PACT Aunt Mabel","metadata":{"provider":"nicrron","data_kind":"synthetic","source":"engine.py DEFAULT"}},timeout=5)
+   response=httpx.post("https://api.prism.blockconvey.com/api/traces",headers={"X-PRISMtrace-Key":trace_key},json={"project_id":project,"model":result.model,"input_messages":[{"role":"user","content":"[question redacted; synthetic benchmark]"}],"output_message":"[answer redacted; synthetic benchmark]","latency_ms":round((time.perf_counter()-started)*1000),"session_id":session,"agent_id":"pact-aunt-mabel","agent_name":"PACT Aunt Mabel","metadata":{"provider":"nicrron","data_kind":"synthetic","source":"engine.py DEFAULT"}},timeout=5)
    response.raise_for_status();trace=True
   except Exception:log.warning("PRISM trace not accepted",exc_info=True)
  return {"answer":answer,"model":result.model,"provider":"Nicrron","prism_trace_sent":trace,"session_id":session,"evidence":evidence}
