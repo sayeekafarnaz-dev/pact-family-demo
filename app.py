@@ -16,7 +16,7 @@ DATA=copy.deepcopy(DEFAULT) # Demo-only in-memory store. Never deploy with real 
 # signed session cookie. Fails closed: if PACT_DEMO_PASSWORD is unset, nothing is served.
 SESSION_COOKIE='pact_session'
 SESSION_TTL=int(os.environ.get('PACT_SESSION_TTL_SECONDS','43200'))
-PUBLIC_PATHS={'/health','/login','/logout'}
+PUBLIC_PATHS={'/health','/login','/logout','/try-family','/static/family-demo.html'}
 
 def _password()->str:return os.environ.get('PACT_DEMO_PASSWORD','')
 def _signing_key()->bytes:
@@ -168,3 +168,9 @@ def compare(req:DecisionRequest):
   return compare_decision(DATA,**req.model_dump())
  except ValueError as e:
   raise HTTPException(400,str(e))
+
+
+@app.get('/try-family', include_in_schema=False)
+def try_family_demo():
+    """Public synthetic-only onboarding prototype, isolated from protected research APIs."""
+    return FileResponse('static/family-demo.html', headers={'Cache-Control': 'no-store'})
