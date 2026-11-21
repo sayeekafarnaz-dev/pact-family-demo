@@ -12,6 +12,7 @@ class Question(BaseModel):
  question:str=Field(min_length=2,max_length=1200)
  member:str=Field(default="family",max_length=32)
  session_id:str|None=None
+ privacy_consent:bool=False
 def portfolio():
  rows=[]
  for m in DEFAULT["members"]:
@@ -33,6 +34,7 @@ def integrations():
  return {"nicrron_configured":bool(os.getenv("NICRRON_API_KEY")),"prism_configured":bool((os.getenv("PRISMTRACE_API_KEY") or os.getenv("PRISM_API_KEY")) and os.getenv("PRISMTRACE_PROJECT_ID")),"plaid_configured":bool(os.getenv("PLAID_CLIENT_ID") and os.getenv("PLAID_SECRET")),"plaid_environment":os.getenv("PLAID_ENV","sandbox"),"data_kind":"synthetic"}
 @router.post("/ask")
 def ask(p:Question,request:Request):
+ if not p.privacy_consent:raise HTTPException(403,'Explicit privacy consent is required before sending questions to Nicrron.')
  ip=request.client.host if request.client else 'unknown'
  now=time.time()
  _CALLS[ip]=[t for t in _CALLS.get(ip,[]) if now-t<3600]
