@@ -57,4 +57,4 @@ try{
 }catch(ex){panel.innerHTML=`<div class="card">Unable to run scenario: ${ex.message}</div>`}finally{run.disabled=false}}
 
 refresh().catch(e=>{document.getElementById('metrics').textContent='Could not load backend: '+e.message});
-</script></body></html>
+</script><script src="/static/aunt-mabel.js" defer></script></body></html>
