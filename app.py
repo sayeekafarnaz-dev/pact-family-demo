@@ -16,7 +16,7 @@ DATA=copy.deepcopy(DEFAULT) # Demo-only in-memory store. Never deploy with real 
 # signed session cookie. Fails closed: if PACT_DEMO_PASSWORD is unset, nothing is served.
 SESSION_COOKIE='pact_session'
 SESSION_TTL=int(os.environ.get('PACT_SESSION_TTL_SECONDS','43200'))
-PUBLIC_PATHS={'/health','/login','/logout','/try-family','/static/family-demo.html'}
+PUBLIC_PATHS={'/health','/login','/logout','/try-family','/static/family-demo.html','/static/aunt-mabel.js'}
 
 def _password()->str:return os.environ.get('PACT_DEMO_PASSWORD','')
 def _signing_key()->bytes:
