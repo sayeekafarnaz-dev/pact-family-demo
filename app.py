@@ -7,7 +7,9 @@ from pydantic import BaseModel, Field
 from engine import DEFAULT, snapshot, simulate, optimize, tax_insights, CLASSES, COV, MU
 from decision_lab import compare_decision, EVENTS
 
+from pact_integrations import router as pact_router
 app=FastAPI(title='PACT — family portfolio intelligence (synthetic MVP)',version='0.1.0')
+app.include_router(pact_router)
 app.mount('/static',StaticFiles(directory='static'),name='static')
 DATA=copy.deepcopy(DEFAULT) # Demo-only in-memory store. Never deploy with real financial records.
 
@@ -48,7 +50,7 @@ def _login_page(error:str='',status:int=200)->HTMLResponse:
 @app.middleware('http')
 async def require_demo_password(request:Request,call_next):
  path=request.url.path
- if path in PUBLIC_PATHS or valid_session(request.cookies.get(SESSION_COOKIE)):
+ if path.startswith('/api/public/') or path.startswith('/static/') or path in PUBLIC_PATHS or valid_session(request.cookies.get(SESSION_COOKIE)):
   return await call_next(request)
  if path.startswith('/api/'):
   return JSONResponse({'detail':'Authentication required'},status_code=401)
